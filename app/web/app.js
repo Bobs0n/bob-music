@@ -49,12 +49,26 @@ function show(view) {
 $$(".nav-item").forEach((b) => b.addEventListener("click", () => show(b.dataset.view)));
 
 // ---------- busca ----------
-const TYPE_LABEL = { search: "Resultados", track: "Música", album: "Álbum", playlist: "Playlist", artist: "Artista" };
-const SOURCE_LABEL = { spotify: "Spotify", apple: "Apple Music" };
-const sourceOf = (url) => (/music\.apple\.com/i.test(url || "") ? "apple" : "spotify");
+const TYPE_LABEL = { search: "Resultados", track: "Música", album: "Álbum", playlist: "Playlist", artist: "Artista", video: "Vídeo" };
+const SOURCE_LABEL = { spotify: "Spotify", apple: "Apple Music", youtube: "YouTube" };
+const YT_RE = /(youtube\.com\/(watch\?|shorts\/|playlist\?|live\/|embed\/)|youtu\.be\/)/i;
+const sourceOf = (url) => (YT_RE.test(url || "") ? "youtube" : /music\.apple\.com/i.test(url || "") ? "apple" : "spotify");
+const QUALITY_LABEL = { best: "melhor", 2160: "4K", 1440: "1440p", 1080: "1080p", 720: "720p", 480: "480p", 360: "360p" };
+const PLACEHOLDER = {
+  spotify: "Buscar no Spotify ou colar link (open.spotify.com/...)",
+  apple: "Buscar na Apple Music ou colar link (music.apple.com/...)",
+  youtube: "Buscar no YouTube ou colar link (vídeo, Shorts ou playlist)",
+};
 
-state.source = "spotify";
-try { if (localStorage.getItem("bm-source") === "apple") state.source = "apple"; } catch {}
+const store = {
+  get(k, d) { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+};
+
+state.source = PLACEHOLDER[store.get("bm-source")] ? store.get("bm-source") : "spotify";
+state.ytMode = store.get("bm-yt-mode", "video") === "audio" ? "audio" : "video";
+state.ytQuality = store.get("bm-yt-quality", "1080");
+
 function setSource(src) {
   state.source = src;
   $$(".source").forEach((b) => {
@@ -62,13 +76,37 @@ function setSource(src) {
     b.classList.toggle("active", on);
     b.setAttribute("aria-checked", on);
   });
-  $("#search-input").placeholder = src === "apple"
-    ? "Buscar na Apple Music ou colar link (music.apple.com/...)"
-    : "Buscar no Spotify ou colar link (open.spotify.com/...)";
-  try { localStorage.setItem("bm-source", src); } catch {}
+  $("#search-input").placeholder = PLACEHOLDER[src];
+  $("#yt-options").hidden = src !== "youtube";
+  store.set("bm-source", src);
 }
 $$(".source").forEach((b) => b.addEventListener("click", () => { setSource(b.dataset.source); $("#search-input").focus(); }));
+
+function setYtMode(mode) {
+  state.ytMode = mode;
+  $$("#yt-options .seg").forEach((b) => {
+    const on = b.dataset.mode === mode;
+    b.classList.toggle("active", on);
+    b.setAttribute("aria-checked", on);
+  });
+  $("#yt-quality-wrap").hidden = mode !== "video";
+  $("#yt-hint").textContent = mode === "video"
+    ? "Arquivo MP4, salvo na pasta de vídeos"
+    : "No formato de áudio das Configurações, com capa";
+  store.set("bm-yt-mode", mode);
+  if (state.results) renderResults();
+}
+$$("#yt-options .seg").forEach((b) => b.addEventListener("click", () => setYtMode(b.dataset.mode)));
+$("#yt-quality").value = state.ytQuality;
+if (!$("#yt-quality").value) $("#yt-quality").value = "1080";
+$("#yt-quality").addEventListener("change", (e) => { state.ytQuality = e.target.value; store.set("bm-yt-quality", e.target.value); });
+
 setSource(state.source);
+setYtMode(state.ytMode);
+
+// chave de um item/job: no YouTube o mesmo vídeo pode ser baixado como vídeo e como áudio
+const keyOf = (url, mode) => (mode ? `${url}|${mode}` : url);
+const trackKey = (t) => keyOf(t.url, sourceOf(t.url) === "youtube" ? state.ytMode : null);
 
 function skeleton(n = 8) {
   return Array.from({ length: n }, () => `
@@ -87,7 +125,8 @@ $("#search-form").addEventListener("submit", async (e) => {
   btn.disabled = true;
   try {
     // link colado decide a origem sozinho
-    if (/music\.apple\.com/i.test(q)) setSource("apple");
+    if (YT_RE.test(q)) setSource("youtube");
+    else if (/music\.apple\.com/i.test(q)) setSource("apple");
     else if (/open\.spotify\.com/i.test(q)) setSource("spotify");
     state.results = await api(`/api/search?source=${state.source}&q=` + encodeURIComponent(q));
     renderResults();
@@ -101,13 +140,15 @@ $("#search-form").addEventListener("submit", async (e) => {
 });
 
 function trackAction(t) {
-  const job = state.jobsByUrl[t.url];
+  const job = state.jobsByUrl[trackKey(t)];
+  const yt = sourceOf(t.url) === "youtube";
   if (job) {
-    if (job.status === "done" || job.status === "skipped") return `<span class="pill done">✓ Baixada</span>`;
+    if (job.status === "done" || job.status === "skipped") return `<span class="pill done">✓ ${yt ? "Baixado" : "Baixada"}</span>`;
     if (job.status === "queued") return `<span class="pill busy">Na fila</span>`;
     if (job.status === "running") return `<span class="pill busy">${job.progress}%</span>`;
   }
-  return `<button class="pill" data-dl="${esc(t.url)}">⇣ Baixar</button>`;
+  const label = yt ? (state.ytMode === "video" ? "⇣ Vídeo" : "⇣ Áudio") : "⇣ Baixar";
+  return `<button class="pill" data-dl="${esc(t.url)}">${label}</button>`;
 }
 
 function renderResults() {
@@ -125,11 +166,17 @@ function renderResults() {
   const src = r.source || "spotify";
   $("#list-type").innerHTML = `<span class="src-tag"><span class="dot ${src}"></span>${SOURCE_LABEL[src]} · ${TYPE_LABEL[r.type] || ""}</span>`;
   $("#list-name").textContent = r.type === "search" ? `“${r.name}”` : r.name;
-  $("#list-count").textContent = `${r.tracks.length} música${r.tracks.length > 1 ? "s" : ""}`;
+  const noun = src === "youtube" ? "vídeo" : "música";
+  $("#list-count").textContent = `${r.tracks.length} ${noun}${r.tracks.length > 1 ? "s" : ""}`;
   const cover = $("#list-cover");
   cover.hidden = !r.cover;
+  cover.classList.toggle("wide", src === "youtube");
   if (r.cover) cover.src = r.cover;
-  $("#download-all span").textContent = r.type === "search" ? "Baixar todas" : "Baixar tudo";
+  $("#download-all span").textContent =
+    src === "youtube"
+      ? (state.ytMode === "video" ? "Baixar vídeo" : "Baixar áudio") + (r.tracks.length > 1 ? "s" : "")
+    : r.type === "search" ? "Baixar todas" : "Baixar tudo";
+  list.classList.toggle("yt", src === "youtube");
 
   list.innerHTML = r.tracks.map((t, i) => `
     <div class="track" data-url="${esc(t.url)}">
@@ -158,9 +205,10 @@ function refreshResultActions() {
 }
 
 async function download(tracks) {
+  tracks = tracks.map((t) => (sourceOf(t.url) === "youtube" ? { ...t, mode: state.ytMode, quality: state.ytQuality } : t));
   try {
     const { queued } = await api("/api/download", { method: "POST", body: { tracks } });
-    toast(queued ? `${queued} música${queued > 1 ? "s" : ""} na fila de download` : "Já está na fila");
+    toast(queued ? `${queued} ${queued > 1 ? "itens" : "item"} na fila de download` : "Já está na fila");
     pollJobs();
   } catch (err) {
     toast(err.message, true);
@@ -176,7 +224,7 @@ $("#results").addEventListener("click", (e) => {
 $("#download-all").addEventListener("click", () => {
   if (!state.results) return;
   const pending = state.results.tracks.filter((t) => {
-    const j = state.jobsByUrl[t.url];
+    const j = state.jobsByUrl[trackKey(t)];
     return !j || j.status === "error" || j.status === "canceled";
   });
   if (pending.length) download(pending);
@@ -193,7 +241,7 @@ function renderJobs(jobs) {
       ${j.cover ? `<img class="cover" src="${esc(j.cover)}" alt="">` : `<div class="cover">♪</div>`}
       <div class="job-main">
         <div class="t-title">${esc(j.title || j.url)}</div>
-        <div class="t-sub">${esc(j.artist)} <span class="src-tag">· <span class="dot ${sourceOf(j.url)}"></span>${SOURCE_LABEL[sourceOf(j.url)]}</span></div>
+        <div class="t-sub">${esc(j.artist)} <span class="src-tag">· <span class="dot ${sourceOf(j.url)}"></span>${SOURCE_LABEL[sourceOf(j.url)]}${j.mode === "video" ? ` · Vídeo ${QUALITY_LABEL[j.quality] || ""}` : j.mode === "audio" ? " · Só áudio" : ""}</span></div>
         <div class="bar"><i style="width:${j.progress}%"></i></div>
         <div class="job-line"><span class="status">${STATUS_ICON[j.status] || ""} ${esc(j.message)}</span><span>${j.status === "running" ? j.progress + "%" : ""}</span></div>
         ${j.error ? `<div class="job-err" title="${esc(j.error)}">${esc(j.error)}</div>` : ""}
@@ -217,6 +265,7 @@ $("#jobs").addEventListener("click", async (e) => {
 });
 $("#clear-jobs").addEventListener("click", async () => { await api("/api/jobs/clear", { method: "POST" }); pollJobs(); });
 $("#open-folder").addEventListener("click", () => api("/api/open-folder", { method: "POST", body: {} }));
+$("#open-video-folder").addEventListener("click", () => api("/api/open-folder", { method: "POST", body: { videos: true } }));
 
 let pollTimer = null;
 let lastDone = 0;
@@ -226,7 +275,7 @@ async function pollJobs() {
     const jobs = await api("/api/jobs");
     state.jobsByUrl = {};
     // a lista vem do mais novo para o mais antigo: o mais novo prevalece
-    for (const j of [...jobs].reverse()) state.jobsByUrl[j.url] = j;
+    for (const j of [...jobs].reverse()) state.jobsByUrl[keyOf(j.url, j.mode)] = j;
     renderJobs(jobs);
     refreshResultActions();
     const active = jobs.filter((j) => j.status === "queued" || j.status === "running").length;
@@ -250,20 +299,39 @@ async function loadLibrary() {
   } catch (err) { toast(err.message, true); }
 }
 
+state.libKind = store.get("bm-lib-kind", "all");
+function setLibKind(kind) {
+  state.libKind = kind;
+  $$("#lib-kinds .seg").forEach((b) => {
+    const on = b.dataset.kind === kind;
+    b.classList.toggle("active", on);
+    b.setAttribute("aria-checked", on);
+  });
+  store.set("bm-lib-kind", kind);
+  renderLibrary();
+}
+$$("#lib-kinds .seg").forEach((b) => b.addEventListener("click", () => setLibKind(b.dataset.kind)));
+queueMicrotask(() => setLibKind(["all", "audio", "video"].includes(state.libKind) ? state.libKind : "all"));
+
 function renderLibrary() {
   const f = $("#lib-filter").value.trim().toLowerCase();
-  const items = state.library.filter((x) => !f || (x.title + " " + x.artist).toLowerCase().includes(f));
+  const items = state.library.filter((x) =>
+    (state.libKind === "all" || x.kind === state.libKind) &&
+    (!f || (x.title + " " + x.artist).toLowerCase().includes(f)));
   $("#lib-empty").hidden = state.library.length > 0;
   const current = state.queue[state.playing]?.path;
   $("#library").innerHTML = items.map((x, i) => `
-    <div class="track ${x.path === current ? "playing" : ""}" data-path="${esc(x.path)}">
+    <div class="track ${x.path === current ? "playing" : ""} ${x.kind === "video" ? "is-video" : ""}" data-path="${esc(x.path)}">
       <span class="idx">${i + 1}</span>
-      <img class="cover" src="/api/cover?file=${encodeURIComponent(x.path)}" loading="lazy" alt="" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'cover',textContent:'♪'}))">
+      <div class="cover-wrap">
+        <img class="cover" src="/api/cover?file=${encodeURIComponent(x.path)}" loading="lazy" alt="" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'cover',textContent:'${x.kind === "video" ? "▶" : "♪"}'}))">
+        ${x.kind === "video" ? '<span class="play-badge">▶</span>' : ""}
+      </div>
       <div class="t-main">
         <div class="t-title">${esc(x.title)}</div>
         <div class="t-sub">${esc(x.artist)}</div>
       </div>
-      <div class="t-album muted">${esc(x.ext.toUpperCase())} · ${fmtSize(x.size)}</div>
+      <div class="t-album muted">${x.kind === "video" ? '<span class="kind-tag">VÍDEO</span> ' : ""}${esc(x.ext.toUpperCase())} · ${fmtSize(x.size)}</div>
       <div class="t-dur"></div>
       <div class="t-act">
         <button class="icon-btn" data-reveal="${esc(x.path)}" title="Mostrar na pasta"><svg viewBox="0 0 24 24"><path d="M3 5h7l2 2h9v12H3V5Zm2 4v8h14V9H5Z"/></svg></button>
@@ -287,10 +355,35 @@ $("#library").addEventListener("click", async (e) => {
   }
   const row = e.target.closest(".track");
   if (!row) return;
-  const idx = state.libraryView.findIndex((x) => x.path === row.dataset.path);
-  state.queue = state.libraryView.slice();
-  play(idx);
+  const item = state.libraryView.find((x) => x.path === row.dataset.path);
+  if (!item) return;
+  if (item.kind === "video") { openVideo(item); return; }
+  state.queue = state.libraryView.filter((x) => x.kind !== "video");
+  play(state.queue.indexOf(item));
 });
+
+// ---------- player de vídeo ----------
+const video = $("#video");
+function openVideo(item) {
+  if (!audio.paused) audio.pause();
+  $("#video-title").textContent = item.title;
+  $("#video-artist").textContent = item.artist;
+  video.src = "/api/stream?file=" + encodeURIComponent(item.path);
+  $("#video-modal").hidden = false;
+  video.play().catch(() => {});
+}
+function closeVideo() {
+  video.pause();
+  video.removeAttribute("src");
+  video.load();
+  $("#video-modal").hidden = true;
+}
+$("#video-close").addEventListener("click", closeVideo);
+$("#video-modal").addEventListener("click", (e) => { if (e.target.id === "video-modal") closeVideo(); });
+video.addEventListener("error", () => {
+  if (video.getAttribute("src")) toast("Este vídeo não pode ser tocado aqui. Abra pela pasta de vídeos.", true);
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#video-modal").hidden) closeVideo(); });
 
 // ---------- player ----------
 const audio = $("#audio");
@@ -329,7 +422,7 @@ $("#seek").addEventListener("change", (e) => {
 $("#volume").addEventListener("input", (e) => (audio.volume = e.target.value / 100));
 audio.volume = 0.8;
 document.addEventListener("keydown", (e) => {
-  if (e.code === "Space" && !["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName) && audio.src) {
+  if (e.code === "Space" && $("#video-modal").hidden && !["INPUT", "SELECT", "TEXTAREA", "BUTTON"].includes(document.activeElement.tagName) && audio.src) {
     e.preventDefault();
     audio.paused ? audio.play() : audio.pause();
   }
@@ -342,6 +435,7 @@ async function loadSettings() {
   form.format.innerHTML = s.formats.map((f) => `<option value="${f}">${f.toUpperCase()}</option>`).join("");
   form.bitrate.innerHTML = s.bitrates.map((b) => `<option value="${b}">${b === "auto" ? "Automático" : b.replace("k", " kbps")}</option>`).join("");
   form.output_dir.value = s.output_dir;
+  form.video_dir.value = s.video_dir || "";
   form.format.value = s.format;
   form.bitrate.value = s.bitrate;
   form.lyrics.checked = s.lyrics;
@@ -355,6 +449,7 @@ $("#settings-form").addEventListener("submit", async (e) => {
       method: "POST",
       body: {
         output_dir: f.output_dir.value.trim(),
+        video_dir: f.video_dir.value.trim() || null,
         format: f.format.value,
         bitrate: f.bitrate.value,
         lyrics: f.lyrics.checked,

@@ -37,7 +37,7 @@ from spotdl.types.song import Song
 from spotdl.utils.config import DEFAULT_CONFIG
 from spotdl.utils.spotify import SpotifyClient
 
-from app import apple
+from app import apple, youtube
 
 logger = logging.getLogger("bobmusic")
 
@@ -83,8 +83,12 @@ SETTINGS_FILE = DATA_DIR / "settings.json"
 AUDIO_FORMATS = ["mp3", "m4a", "flac", "opus", "ogg", "wav"]
 BITRATES = ["auto", "128k", "192k", "256k", "320k"]
 
+VIDEO_FORMATS = ["mp4", "webm", "mkv", "mov"]
+_VIDEOS_HOME = Path.home() / ("Movies" if sys.platform == "darwin" else "Videos")
+
 DEFAULT_SETTINGS: Dict[str, Any] = {
     "output_dir": str(Path.home() / "Music" / "Bob Music"),
+    "video_dir": str(_VIDEOS_HOME / "Bob Music"),
     "format": "mp3",
     "bitrate": "320k",
     "lyrics": True,
@@ -149,6 +153,13 @@ class Job:
         self.title: str = track.get("title", "")
         self.artist: str = track.get("artist", "")
         self.cover: Optional[str] = track.get("cover")
+        # YouTube: "video" (vídeo + áudio) ou "audio"; Spotify/Apple: sempre áudio (None)
+        self.mode: Optional[str] = None
+        self.quality: str = "best"
+        if youtube.is_youtube_url(self.url):
+            self.mode = "video" if track.get("mode") == "video" else "audio"
+            q = str(track.get("quality") or "best")
+            self.quality = q if q in youtube.VIDEO_QUALITIES else "best"
         self.status = "queued"  # queued | running | done | skipped | error | canceled
         self.progress = 0
         self.message = "Na fila"
@@ -163,6 +174,8 @@ class Job:
             "title": self.title,
             "artist": self.artist,
             "cover": self.cover,
+            "mode": self.mode,
+            "quality": self.quality,
             "status": self.status,
             "progress": int(self.progress),
             "message": self.message,
@@ -201,17 +214,17 @@ class DownloadWorker(threading.Thread):
     def enqueue(self, tracks: List[Dict[str, Any]]) -> List[Job]:
         created = []
         with self.lock:
-            active_urls = {
-                j.url for j in self.jobs.values() if j.status in ("queued", "running")
+            active = {
+                (j.url, j.mode) for j in self.jobs.values() if j.status in ("queued", "running")
             }
             for track in tracks:
-                if track["url"] in active_urls:
-                    continue
                 job = Job(track)
+                if (job.url, job.mode) in active:
+                    continue
                 self.jobs[job.id] = job
                 self.order.append(job.id)
                 created.append(job)
-                active_urls.add(job.url)
+                active.add((job.url, job.mode))
         for job in created:
             self.pending.put(job.id)
         return created
@@ -271,6 +284,9 @@ class DownloadWorker(threading.Thread):
                 job.status, job.message, job.progress = "running", "Lendo metadados", 5
                 self.current = job
             try:
+                if job.mode:
+                    self._download_youtube(job)
+                    continue
                 downloader = self._ensure_downloader()
                 if apple.is_apple_url(job.url):
                     song = apple.song_from_url(job.url)
@@ -293,6 +309,22 @@ class DownloadWorker(threading.Thread):
                 job.status, job.message, job.error = "error", "Erro", str(exc)[:300]
             finally:
                 self.current = None
+
+    def _download_youtube(self, job: Job) -> None:
+        def on_progress(progress: int, message: str) -> None:
+            job.progress = max(job.progress, min(99, progress))
+            job.message = message
+
+        ffmpeg = find_ffmpeg()
+        result = youtube.download(
+            job.url, job.mode or "audio", job.quality, SETTINGS,
+            None if ffmpeg == "ffmpeg" else ffmpeg, on_progress,
+        )
+        job.path = result["path"]
+        job.title = job.title or result["title"]
+        job.artist = job.artist or result["artist"]
+        job.cover = job.cover or result["cover"]
+        job.status, job.message, job.progress = "done", "Concluído", 100
 
 
 WORKER = DownloadWorker()
@@ -400,6 +432,18 @@ def api_search(q: str, source: str = "spotify") -> Dict[str, Any]:
     q = q.strip()
     if not q:
         raise HTTPException(400, "Digite algo para buscar")
+    if youtube.is_youtube_url(q) or (source == "youtube" and not SPOTIFY_URL.search(q)
+                                     and not apple.is_apple_url(q)):
+        try:
+            if youtube.is_youtube_url(q):
+                return youtube.resolve(q)
+            return {"type": "search", "source": "youtube", "name": q, "cover": None,
+                    "tracks": youtube.search(q)}
+        except youtube.YouTubeError as exc:
+            raise HTTPException(502, str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Erro no YouTube")
+            raise HTTPException(502, f"Não consegui falar com o YouTube: {exc}") from exc
     if apple.is_apple_url(q):
         try:
             return apple.resolve(q)
@@ -436,9 +480,10 @@ def api_download(req: DownloadRequest) -> Dict[str, Any]:
     tracks = [
         t for t in req.tracks
         if SPOTIFY_URL.search(t.get("url", "")) or apple.is_apple_url(t.get("url", ""))
+        or youtube.is_youtube_url(t.get("url", ""))
     ]
     if not tracks:
-        raise HTTPException(400, "Nenhuma música válida")
+        raise HTTPException(400, "Nenhum item válido para baixar")
     jobs = WORKER.enqueue(tracks)
     return {"queued": len(jobs)}
 
@@ -473,6 +518,7 @@ def api_get_settings() -> Dict[str, Any]:
 
 class SettingsUpdate(BaseModel):
     output_dir: Optional[str] = None
+    video_dir: Optional[str] = None
     format: Optional[str] = None
     bitrate: Optional[str] = None
     lyrics: Optional[bool] = None
@@ -486,12 +532,13 @@ def api_set_settings(update: SettingsUpdate) -> Dict[str, Any]:
         raise HTTPException(400, "Formato inválido")
     if "bitrate" in changes and changes["bitrate"] not in BITRATES:
         raise HTTPException(400, "Bitrate inválido")
-    if "output_dir" in changes:
-        try:
-            Path(changes["output_dir"]).expanduser().mkdir(parents=True, exist_ok=True)
-        except OSError as exc:
-            raise HTTPException(400, f"Pasta inválida: {exc}") from exc
-        changes["output_dir"] = str(Path(changes["output_dir"]).expanduser().resolve())
+    for key in ("output_dir", "video_dir"):
+        if key in changes:
+            try:
+                Path(changes[key]).expanduser().mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                raise HTTPException(400, f"Pasta inválida: {exc}") from exc
+            changes[key] = str(Path(changes[key]).expanduser().resolve())
     SETTINGS.update(changes)
     save_settings(SETTINGS)
     WORKER.settings_dirty = True
@@ -502,14 +549,22 @@ def _library_root() -> Path:
     return Path(SETTINGS["output_dir"]).resolve()
 
 
+def _video_root() -> Path:
+    return Path(SETTINGS.get("video_dir") or DEFAULT_SETTINGS["video_dir"]).resolve()
+
+
 @app.get("/api/library")
 def api_library() -> List[Dict[str, Any]]:
-    root = _library_root()
-    if not root.exists():
-        return []
-    files = []
-    for path in root.rglob("*"):
-        if path.is_file() and path.suffix[1:].lower() in AUDIO_FORMATS:
+    files, seen = [], set()
+    for root, exts, kind in ((_library_root(), AUDIO_FORMATS, "audio"),
+                             (_video_root(), VIDEO_FORMATS, "video")):
+        if not root.exists():
+            continue
+        for path in root.rglob("*"):
+            ext = path.suffix[1:].lower()
+            if ext not in exts or path in seen or not path.is_file():
+                continue
+            seen.add(path)
             stat = path.stat()
             stem = path.stem
             artist, _, title = stem.partition(" - ")
@@ -520,7 +575,8 @@ def api_library() -> List[Dict[str, Any]]:
                 "artist": artist if title else "",
                 "size": stat.st_size,
                 "mtime": stat.st_mtime,
-                "ext": path.suffix[1:].lower(),
+                "ext": ext,
+                "kind": kind,
             })
     files.sort(key=lambda f: f["mtime"], reverse=True)
     return files
@@ -528,13 +584,16 @@ def api_library() -> List[Dict[str, Any]]:
 
 def _safe_library_path(file: str) -> Path:
     path = Path(file).resolve()
-    if not path.is_relative_to(_library_root()) or not path.is_file():
+    inside = path.is_relative_to(_library_root()) or path.is_relative_to(_video_root())
+    if not inside or not path.is_file():
         raise HTTPException(404, "Arquivo não encontrado")
     return path
 
 
 MIME = {"mp3": "audio/mpeg", "m4a": "audio/mp4", "flac": "audio/flac",
-        "opus": "audio/ogg", "ogg": "audio/ogg", "wav": "audio/wav"}
+        "opus": "audio/ogg", "ogg": "audio/ogg", "wav": "audio/wav",
+        "mp4": "video/mp4", "webm": "video/webm", "mkv": "video/x-matroska",
+        "mov": "video/quicktime"}
 
 
 @app.get("/api/stream")
@@ -573,11 +632,12 @@ def api_cover(file: str):
 
 class OpenRequest(BaseModel):
     file: Optional[str] = None
+    videos: bool = False
 
 
 @app.post("/api/open-folder")
 def api_open_folder(req: OpenRequest) -> Dict[str, bool]:
-    root = _library_root()
+    root = _video_root() if req.videos else _library_root()
     root.mkdir(parents=True, exist_ok=True)
     import subprocess
 

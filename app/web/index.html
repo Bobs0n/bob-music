@@ -40,8 +40,8 @@
       </nav>
 
       <div class="sidebar-foot">
-        <p>Cole um link de música, álbum, playlist ou artista do Spotify ou da Apple Music — ou só digite o nome.</p>
-        <p class="muted">Motor: spotDL</p>
+        <p>Cole um link do Spotify, da Apple Music ou do YouTube — ou só digite o nome.</p>
+        <p class="muted">Motor: spotDL + yt-dlp</p>
       </div>
     </aside>
 
@@ -57,12 +57,41 @@
             <button type="button" class="source" data-source="apple" role="radio" aria-checked="false">
               <span class="dot apple"></span>Apple Music
             </button>
+            <button type="button" class="source" data-source="youtube" role="radio" aria-checked="false">
+              <span class="dot youtube"></span>YouTube
+            </button>
           </div>
           <form class="searchbar" id="search-form" autocomplete="off">
             <svg viewBox="0 0 24 24"><path d="M10.5 3a7.5 7.5 0 0 1 5.96 12.05l4.25 4.24-1.42 1.42-4.24-4.25A7.5 7.5 0 1 1 10.5 3Zm0 2a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11Z"/></svg>
             <input id="search-input" type="text" placeholder="Nome da música ou link do Spotify / Apple Music" autofocus>
             <button type="submit" class="btn primary">Buscar</button>
           </form>
+          <div class="yt-options" id="yt-options" hidden>
+            <span class="yt-label">Baixar como</span>
+            <div class="segmented" role="radiogroup" aria-label="Baixar como">
+              <button type="button" class="seg active" data-mode="video" role="radio" aria-checked="true">
+                <svg viewBox="0 0 24 24"><path d="M4 5h12a2 2 0 0 1 2 2v2.5l4-2.5v10l-4-2.5V17a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"/></svg>
+                Vídeo + áudio
+              </button>
+              <button type="button" class="seg" data-mode="audio" role="radio" aria-checked="false">
+                <svg viewBox="0 0 24 24"><path d="M9 18.5a3.5 3.5 0 1 1-2-3.16V5.6l12-2.4v12.3a3.5 3.5 0 1 1-2-3.16V7.04l-8 1.6V18.5Z"/></svg>
+                Só áudio
+              </button>
+            </div>
+            <label class="yt-quality" id="yt-quality-wrap">
+              <span class="yt-label">Qualidade</span>
+              <select class="input" id="yt-quality">
+                <option value="best">Melhor disponível</option>
+                <option value="2160">4K (2160p)</option>
+                <option value="1440">1440p</option>
+                <option value="1080" selected>Full HD (1080p)</option>
+                <option value="720">HD (720p)</option>
+                <option value="480">480p</option>
+                <option value="360">360p</option>
+              </select>
+            </label>
+            <span class="yt-hint muted" id="yt-hint"></span>
+          </div>
         </header>
 
         <div id="results-head" class="results-head" hidden>
@@ -81,7 +110,7 @@
         <div id="results" class="tracklist"></div>
         <div id="search-empty" class="empty">
           <div class="empty-art">♪</div>
-          <p>Busque por uma música ou cole um link do Spotify ou da Apple Music.</p>
+          <p>Busque por uma música ou cole um link do Spotify, da Apple Music ou do YouTube.</p>
         </div>
       </section>
 
@@ -90,7 +119,8 @@
         <header class="page-head">
           <h1>Downloads</h1>
           <div class="actions">
-            <button class="btn ghost" id="open-folder">Abrir pasta</button>
+            <button class="btn ghost" id="open-folder">Pasta de músicas</button>
+            <button class="btn ghost" id="open-video-folder">Pasta de vídeos</button>
             <button class="btn ghost" id="clear-jobs">Limpar concluídos</button>
           </div>
         </header>
@@ -106,6 +136,11 @@
         <header class="page-head">
           <h1>Biblioteca</h1>
           <div class="actions">
+            <div class="segmented small" id="lib-kinds" role="radiogroup" aria-label="Mostrar">
+              <button type="button" class="seg active" data-kind="all" role="radio" aria-checked="true">Tudo</button>
+              <button type="button" class="seg" data-kind="audio" role="radio" aria-checked="false">Músicas</button>
+              <button type="button" class="seg" data-kind="video" role="radio" aria-checked="false">Vídeos</button>
+            </div>
             <input id="lib-filter" class="input" type="text" placeholder="Filtrar...">
             <button class="btn ghost" id="lib-refresh">Atualizar</button>
           </div>
@@ -113,7 +148,7 @@
         <div id="library" class="tracklist"></div>
         <div id="lib-empty" class="empty" hidden>
           <div class="empty-art">♫</div>
-          <p>Sua biblioteca está vazia. As músicas baixadas aparecem aqui.</p>
+          <p>Sua biblioteca está vazia. As músicas e vídeos baixados aparecem aqui.</p>
         </div>
       </section>
 
@@ -122,12 +157,16 @@
         <header class="page-head"><h1>Configurações</h1></header>
         <form id="settings-form" class="settings">
           <label class="field">
-            <span>Pasta de destino</span>
+            <span>Pasta das músicas</span>
             <input class="input" name="output_dir" type="text">
+          </label>
+          <label class="field">
+            <span>Pasta dos vídeos (YouTube)</span>
+            <input class="input" name="video_dir" type="text">
           </label>
           <div class="row">
             <label class="field">
-              <span>Formato</span>
+              <span>Formato do áudio</span>
               <select class="input" name="format"></select>
             </label>
             <label class="field">
@@ -180,6 +219,19 @@
       </div>
       <audio id="audio" preload="metadata"></audio>
     </footer>
+  </div>
+
+  <div id="video-modal" class="modal" hidden>
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="video-title">
+      <div class="modal-head">
+        <div class="modal-titles">
+          <div id="video-title" class="np-title"></div>
+          <div id="video-artist" class="muted"></div>
+        </div>
+        <button class="icon-btn" id="video-close" title="Fechar (Esc)"><svg viewBox="0 0 24 24"><path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4 6.4 5Z"/></svg></button>
+      </div>
+      <video id="video" controls playsinline></video>
+    </div>
   </div>
 
   <div id="toast" class="toast" hidden></div>

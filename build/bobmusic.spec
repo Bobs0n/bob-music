@@ -17,7 +17,7 @@ datas = [
     (str(ROOT / "app" / "assets"), "app/assets"),
 ]
 binaries = []
-hiddenimports = ["app.server", "app.apple"]
+hiddenimports = ["app.server", "app.apple", "app.youtube"]
 
 # pacotes com dados/submódulos carregados dinamicamente
 for pkg in ["spotdl", "ytmusicapi", "pykakasi", "yt_dlp", "yt_dlp_ejs", "syncedlyrics",
@@ -71,8 +71,8 @@ if IS_MAC:
         bundle_identifier="com.bobmusic.app",
         info_plist={
             "CFBundleDisplayName": "Bob Music",
-            "CFBundleShortVersionString": "1.0.0",
-            "CFBundleVersion": "1.0.0",
+            "CFBundleShortVersionString": "1.1.0",
+            "CFBundleVersion": "1.1.0",
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "11.0",
         },

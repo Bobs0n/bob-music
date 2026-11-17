@@ -2,6 +2,7 @@
 
 App de desktop com interface própria, usando o [spotDL](https://github.com/spotDL/spotify-downloader) como motor.
 Os metadados (nome, artista, álbum, capa) vêm do **Spotify** ou da **Apple Music**. O áudio vem do YouTube Music/YouTube.
+Também baixa **vídeos do YouTube**, com vídeo e áudio (MP4) ou só o áudio, usando o [yt-dlp](https://github.com/yt-dlp/yt-dlp).
 
 ## Como abrir
 
@@ -24,7 +25,7 @@ Precisa de Python 3.12 e do ffmpeg no PATH (os dois já estão instalados nesta 
 
 Os instaladores já incluem tudo (Python, dependências e ffmpeg). Quem instala não precisa de mais nada.
 
-**Windows**: `build\installer\BobMusic-Setup-1.0.0-Windows.exe` (~100 MB).
+**Windows**: `build\installer\BobMusic-Setup-1.1.0-Windows.exe` (~100 MB).
 - Instala sem pedir administrador.
 - Cria os atalhos no Menu Iniciar e, se você marcar a opção, na Área de Trabalho.
 - Desinstala por Configurações > Aplicativos.
@@ -32,7 +33,7 @@ Os instaladores já incluem tudo (Python, dependências e ffmpeg). Quem instala 
 - O Windows SmartScreen pode avisar "Editor desconhecido". Clique em *Mais informações > Executar assim mesmo*. O aviso aparece porque o instalador não tem assinatura digital paga.
 
 **Mac**: o `.dmg` só pode ser gerado num Mac. Há dois jeitos:
-1. **Num Mac**, na pasta do projeto, rode `bash build/build-mac.sh`. O resultado sai em `build/installer/BobMusic-1.0.0-Mac-<arm64|x86_64>.dmg`.
+1. **Num Mac**, na pasta do projeto, rode `bash build/build-mac.sh`. O resultado sai em `build/installer/BobMusic-1.1.0-Mac-<arm64|x86_64>.dmg`.
 2. **Pelo GitHub, sem Mac**: envie o projeto para um repositório e vá em *Actions > Instaladores > Run workflow*. Ele gera o `.dmg` para Mac Apple Silicon e Intel, e também o `.exe` do Windows.
 
 Para instalar no Mac, abra o `.dmg` e arraste o **Bob Music** para *Aplicativos*. Na primeira vez, clique com o botão direito no app e escolha *Abrir*, depois *Abrir* de novo. Esse passo é necessário porque o app não tem assinatura da Apple, que custa US$ 99/ano.
@@ -43,8 +44,12 @@ Configurações e log ficam em `%APPDATA%\BobMusic` no Windows e em `~/Library/A
 
 - **Buscar**: escolha Spotify ou Apple Music, digite o nome de uma música ou cole um link (música, álbum, playlist ou artista). Ao colar um link, o app troca a origem sozinho.
   - Apple Music usa dados públicos da Apple (iTunes Lookup e a página pública da playlist), sem precisar de login. Playlists privadas não funcionam.
+- **YouTube**: escolha *YouTube* na busca. Dá para digitar o que procura ou colar um link de vídeo, Shorts ou playlist. Depois escolha como baixar:
+  - **Vídeo + áudio**: arquivo MP4 em Melhor, 4K, 1440p, 1080p, 720p, 480p ou 360p. O app prefere H.264 + AAC, que abre em qualquer player. Fica em `Vídeos\Bob Music` (no Mac, `Filmes/Bob Music`).
+  - **Só áudio**: usa o formato e o bitrate das Configurações e grava a capa. Fica junto com as músicas.
+  - Vídeos privados, transmissões ao vivo e vídeos com restrição de idade não baixam.
 - **Downloads**: uma fila com progresso por música. Dá para cancelar, tentar de novo e abrir a pasta.
-- **Biblioteca**: as músicas baixadas, com capa, filtro e um player embutido (barra de espaço pausa/toca).
+- **Biblioteca**: as músicas e os vídeos baixados, com capa, filtro (Tudo / Músicas / Vídeos) e players embutidos de áudio e de vídeo. A barra de espaço pausa e toca a música; Esc fecha o vídeo.
 - **Configurações**: pasta de destino, formato (MP3, M4A, FLAC, OPUS, OGG, WAV), bitrate, letra embutida e organização em pastas Artista/Álbum.
 
 Pasta padrão: `Música\Bob Music`. As configurações ficam em `%APPDATA%\BobMusic\settings.json`.

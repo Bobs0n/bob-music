@@ -27,7 +27,7 @@ pyinstaller --noconfirm --clean --distpath build/dist --workpath build/work buil
 codesign --force --deep --sign - "build/dist/Bob Music.app"
 
 # .dmg com atalho para Aplicativos (arrastar e soltar)
-VERSION=1.0.0
+VERSION=1.1.0
 ARCH_NAME=$(uname -m)
 STAGE=build/dmg
 rm -rf "$STAGE" && mkdir -p "$STAGE" build/installer

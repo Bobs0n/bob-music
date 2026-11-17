@@ -2,7 +2,7 @@
 ; Gere com: build\build-windows.ps1
 
 #define AppName "Bob Music"
-#define AppVersion "1.0.0"
+#define AppVersion "1.1.0"
 #define AppExe "Bob Music.exe"
 
 [Setup]
