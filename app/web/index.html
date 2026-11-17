@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bob Music</title>
+  <link rel="icon" type="image/png" href="icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">
+          <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M9 18.5a3.5 3.5 0 1 1-2-3.16V5.6l12-2.4v12.3a3.5 3.5 0 1 1-2-3.16V7.04l-8 1.6V18.5Z"/></svg>
+        </div>
+        <span>Bob Music</span>
+      </div>
+
+      <nav class="nav">
+        <button class="nav-item active" data-view="search">
+          <svg viewBox="0 0 24 24"><path d="M10.5 3a7.5 7.5 0 0 1 5.96 12.05l4.25 4.24-1.42 1.42-4.24-4.25A7.5 7.5 0 1 1 10.5 3Zm0 2a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11Z"/></svg>
+          Buscar
+        </button>
+        <button class="nav-item" data-view="downloads">
+          <svg viewBox="0 0 24 24"><path d="M11 3h2v10.17l3.59-3.58L18 11l-6 6-6-6 1.41-1.41L11 13.17V3ZM4 19h16v2H4v-2Z"/></svg>
+          Downloads
+          <span class="badge" id="badge" hidden>0</span>
+        </button>
+        <button class="nav-item" data-view="library">
+          <svg viewBox="0 0 24 24"><path d="M4 4h2v16H4V4Zm4 0h2v16H8V4Zm4.5.6 1.93-.52 4.15 15.46-1.93.52L12.5 4.6Z"/></svg>
+          Biblioteca
+        </button>
+        <button class="nav-item" data-view="settings">
+          <svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8Zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm-1.6-8h3.2l.5 2.6c.6.24 1.17.56 1.68.95l2.5-.86 1.6 2.77-2 1.75a7 7 0 0 1 0 1.58l2 1.75-1.6 2.77-2.5-.86c-.51.39-1.08.71-1.68.95L13.6 22h-3.2l-.5-2.6a7 7 0 0 1-1.68-.95l-2.5.86-1.6-2.77 2-1.75a7 7 0 0 1 0-1.58l-2-1.75 1.6-2.77 2.5.86c.51-.39 1.08-.71 1.68-.95L10.4 2Z"/></svg>
+          Configurações
+        </button>
+      </nav>
+
+      <div class="sidebar-foot">
+        <p>Cole um link de música, álbum, playlist ou artista do Spotify ou da Apple Music — ou só digite o nome.</p>
+        <p class="muted">Motor: spotDL</p>
+      </div>
+    </aside>
+
+    <main class="main">
+      <!-- BUSCAR -->
+      <section class="view active" id="view-search">
+        <header class="hero">
+          <h1>O que vamos baixar hoje?</h1>
+          <div class="sources" role="radiogroup" aria-label="Buscar em">
+            <button type="button" class="source active" data-source="spotify" role="radio" aria-checked="true">
+              <span class="dot spotify"></span>Spotify
+            </button>
+            <button type="button" class="source" data-source="apple" role="radio" aria-checked="false">
+              <span class="dot apple"></span>Apple Music
+            </button>
+          </div>
+          <form class="searchbar" id="search-form" autocomplete="off">
+            <svg viewBox="0 0 24 24"><path d="M10.5 3a7.5 7.5 0 0 1 5.96 12.05l4.25 4.24-1.42 1.42-4.24-4.25A7.5 7.5 0 1 1 10.5 3Zm0 2a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11Z"/></svg>
+            <input id="search-input" type="text" placeholder="Nome da música ou link do Spotify / Apple Music" autofocus>
+            <button type="submit" class="btn primary">Buscar</button>
+          </form>
+        </header>
+
+        <div id="results-head" class="results-head" hidden>
+          <img id="list-cover" class="list-cover" alt="" hidden>
+          <div class="results-title">
+            <span id="list-type" class="eyebrow"></span>
+            <h2 id="list-name"></h2>
+            <span id="list-count" class="muted"></span>
+          </div>
+          <button class="btn primary" id="download-all">
+            <svg viewBox="0 0 24 24"><path d="M11 3h2v10.17l3.59-3.58L18 11l-6 6-6-6 1.41-1.41L11 13.17V3ZM4 19h16v2H4v-2Z"/></svg>
+            <span>Baixar tudo</span>
+          </button>
+        </div>
+
+        <div id="results" class="tracklist"></div>
+        <div id="search-empty" class="empty">
+          <div class="empty-art">♪</div>
+          <p>Busque por uma música ou cole um link do Spotify ou da Apple Music.</p>
+        </div>
+      </section>
+
+      <!-- DOWNLOADS -->
+      <section class="view" id="view-downloads">
+        <header class="page-head">
+          <h1>Downloads</h1>
+          <div class="actions">
+            <button class="btn ghost" id="open-folder">Abrir pasta</button>
+            <button class="btn ghost" id="clear-jobs">Limpar concluídos</button>
+          </div>
+        </header>
+        <div id="jobs" class="jobs"></div>
+        <div id="jobs-empty" class="empty">
+          <div class="empty-art">⇣</div>
+          <p>Nenhum download ainda.</p>
+        </div>
+      </section>
+
+      <!-- BIBLIOTECA -->
+      <section class="view" id="view-library">
+        <header class="page-head">
+          <h1>Biblioteca</h1>
+          <div class="actions">
+            <input id="lib-filter" class="input" type="text" placeholder="Filtrar...">
+            <button class="btn ghost" id="lib-refresh">Atualizar</button>
+          </div>
+        </header>
+        <div id="library" class="tracklist"></div>
+        <div id="lib-empty" class="empty" hidden>
+          <div class="empty-art">♫</div>
+          <p>Sua biblioteca está vazia. As músicas baixadas aparecem aqui.</p>
+        </div>
+      </section>
+
+      <!-- CONFIGURAÇÕES -->
+      <section class="view" id="view-settings">
+        <header class="page-head"><h1>Configurações</h1></header>
+        <form id="settings-form" class="settings">
+          <label class="field">
+            <span>Pasta de destino</span>
+            <input class="input" name="output_dir" type="text">
+          </label>
+          <div class="row">
+            <label class="field">
+              <span>Formato</span>
+              <select class="input" name="format"></select>
+            </label>
+            <label class="field">
+              <span>Qualidade (bitrate)</span>
+              <select class="input" name="bitrate"></select>
+            </label>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" name="lyrics">
+            <span class="switch"></span>
+            <span>Gravar letra da música no arquivo</span>
+          </label>
+          <label class="toggle">
+            <input type="checkbox" name="subfolders">
+            <span class="switch"></span>
+            <span>Organizar em pastas Artista / Álbum</span>
+          </label>
+          <div class="settings-foot">
+            <button class="btn primary" type="submit">Salvar</button>
+            <span id="settings-msg" class="muted"></span>
+          </div>
+        </form>
+      </section>
+    </main>
+
+    <!-- PLAYER -->
+    <footer class="player" id="player" hidden>
+      <div class="now">
+        <img id="np-cover" alt="">
+        <div>
+          <div id="np-title" class="np-title"></div>
+          <div id="np-artist" class="muted"></div>
+        </div>
+      </div>
+      <div class="controls">
+        <div class="buttons">
+          <button class="icon-btn" id="prev" title="Anterior"><svg viewBox="0 0 24 24"><path d="M6 6h2v12H6V6Zm3.5 6L18 18V6l-8.5 6Z"/></svg></button>
+          <button class="icon-btn play" id="play" title="Tocar/Pausar"><svg viewBox="0 0 24 24" id="play-icon"><path d="M8 5v14l11-7L8 5Z"/></svg></button>
+          <button class="icon-btn" id="next" title="Próxima"><svg viewBox="0 0 24 24"><path d="M16 6h2v12h-2V6ZM6 18l8.5-6L6 6v12Z"/></svg></button>
+        </div>
+        <div class="seek">
+          <span id="t-cur">0:00</span>
+          <input type="range" id="seek" min="0" max="1000" value="0">
+          <span id="t-dur">0:00</span>
+        </div>
+      </div>
+      <div class="volume">
+        <svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4V9Zm12.5 3a4.5 4.5 0 0 0-2.5-4.03v8.05A4.5 4.5 0 0 0 16.5 12Z"/></svg>
+        <input type="range" id="volume" min="0" max="100" value="80">
+      </div>
+      <audio id="audio" preload="metadata"></audio>
+    </footer>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>

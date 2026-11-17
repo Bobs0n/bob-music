@@ -1,0 +1,10 @@
+.venv/
+.venv-mac/
+__pycache__/
+build/dist/
+build/work/
+build/dmg/
+build/vendor/
+build/installer/
+build/pyinstaller.log
+*.lnk

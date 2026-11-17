@@ -1,0 +1,49 @@
+# Gera os instaladores do Bob Music no GitHub (Windows + Mac Intel + Mac Apple Silicon).
+# Rode em: Actions > "Instaladores" > Run workflow. Os arquivos ficam em "Artifacts".
+name: Instaladores
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  mac:
+    strategy:
+      matrix:
+        os: [macos-15, macos-15-intel]   # Apple Silicon (M1/M2/M3/M4) e Intel
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: bash build/build-mac.sh
+        env:
+          PYTHON: python
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BobMusic-Mac-${{ matrix.os }}
+          path: build/installer/*.dmg
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Ambiente
+        shell: pwsh
+        run: |
+          python -m venv .venv
+          choco install innosetup -y --no-progress
+          New-Item -ItemType Directory -Force build\vendor | Out-Null
+          Invoke-WebRequest "https://github.com/eugeneware/ffmpeg-static/releases/download/b4.4/win32-x64" -OutFile build\vendor\ffmpeg.exe
+      - name: Build
+        shell: pwsh
+        run: build\build-windows.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BobMusic-Windows
+          path: build/installer/*.exe

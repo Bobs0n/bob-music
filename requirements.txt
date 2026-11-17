@@ -1,0 +1,4 @@
+spotdl==4.6.0
+fastapi
+uvicorn[standard]
+pywebview
