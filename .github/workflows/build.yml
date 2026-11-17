@@ -11,7 +11,7 @@ jobs:
   mac:
     strategy:
       matrix:
-        os: [macos-15, macos-15-intel]   # Apple Silicon (M1/M2/M3/M4) e Intel
+        os: [macos-latest, macos-15-intel]   # Apple Silicon (M1/M2/M3/M4) e Intel
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
