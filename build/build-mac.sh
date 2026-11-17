@@ -35,5 +35,13 @@ cp -R "build/dist/Bob Music.app" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
 DMG="build/installer/BobMusic-$VERSION-Mac-$ARCH_NAME.dmg"
 rm -f "$DMG"
-hdiutil create -volname "Bob Music" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
+# o hdiutil às vezes falha com "Resource busy" (antivírus do macOS); tenta de novo
+for attempt in 1 2 3 4 5; do
+  if hdiutil create -volname "Bob Music" -srcfolder "$STAGE" -ov -format UDZO "$DMG"; then
+    break
+  fi
+  [ "$attempt" = 5 ] && { echo "hdiutil falhou"; exit 1; }
+  echo "hdiutil ocupado, tentando de novo ($attempt)..."
+  sleep $((attempt * 5))
+done
 echo "Pronto: $DMG"
